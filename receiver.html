@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" type="text/css" href="receiver.css">
+    <link href='http://fonts.googleapis.com/css?family=Bitter:700' rel='stylesheet' type='text/css'>
+    <title>Quiz Me</title>
+  </head>
+  <body>
+      <DIV id="message">Let's Go!<DIV><DIV></DIV>
+    <script type="text/javascript" src="//www.gstatic.com/cast/sdk/libs/receiver/2.0.0/cast_receiver.js"></script>
+    <script type="text/javascript" src="getQuestions.js" ></script>
+    <script type="text/javascript">
+      window.onload = function() {
+        window.inGame = false;
+        window.gameQuestions = getQuestions();
+        window.questionIndex = 0;
+        window.senders = new Array();
+
+        cast.receiver.logger.setLevelValue(0);
+        window.castReceiverManager = cast.receiver.CastReceiverManager.getInstance();
+        console.log('Starting Receiver Manager');
+        
+        // handler for the 'ready' event
+        castReceiverManager.onReady = function(event) {
+          console.log('Received Ready event: ' + JSON.stringify(event.data));
+          window.castReceiverManager.setApplicationState("Application status is ready...");
+        };
+        
+        // handler for 'senderconnected' event
+        castReceiverManager.onSenderConnected = function(event) {
+          console.log('Received Sender Connected event: ' + event.data);
+          console.log(window.castReceiverManager.getSender(event.data).userAgent);
+          var playerNumber = window.castReceiverManager.getSenders().length;
+          sender={id:event.data, score: 0, displayName: "Player " + playerNumber};
+          senders.push(sender);
+        };
+        
+        // handler for 'senderdisconnected' event
+        castReceiverManager.onSenderDisconnected = function(event) {
+          console.log('Received Sender Disconnected event: ' + event.data);
+          if (window.castReceiverManager.getSenders().length == 0) {
+                window.close();
+              }
+        };
+
+        // create a CastMessageBus to handle messages for a custom namespace
+        window.messageBus =
+          window.castReceiverManager.getCastMessageBus(
+              'urn:x-cast:com.google.cast.sample.helloworld');
+
+        // handler for the CastMessageBus message event
+        window.messageBus.onMessage = function(event) {
+          console.log('Message [' + event.senderId + ']: ' + event.data);
+          var data = event.data;
+          obj = JSON.parse(data);
+          if(obj.type == "Start"){
+              startGame();
+          }
+          else if (obj.type == "Answer"){
+              var question = gameQuestions[questionIndex - 1];
+              if(question.answered == false){
+                  question.answered = true;
+                  for(var i = 0; i < senders.length; i++){
+                      sender = senders[i];
+                      if(sender.id == event.senderId){
+                          displayText(sender.displayName + " got it!");
+                          sender.score += 1;
+                      }
+                  }
+                  if(questionIndex < gameQuestions.length){
+                      setTimeout(startGame,1000);
+                  }
+                  else{
+                      var endText = "Game Over <br /><br />"
+                      for(var i = 0; i < senders.length; i++){
+                          var sender = senders[i];
+                          endText += sender.displayName + ":  " + sender.score + "<br />";
+                      }
+                      setTimeout(function(){displayText(endText);},1000);
+                      questionIndex = 0;
+                  }
+              }
+          }
+          
+        }
+
+        // initialize the CastReceiverManager with an application status message
+        window.castReceiverManager.start({statusText: "Application is starting"});
+        console.log('Receiver Manager started');
+        
+      };
+    
+      function startGame() {
+          
+        var question = window.gameQuestions[questionIndex];
+        if(questionIndex == 0){
+            question.first = true;
+        }
+        else if(questionIndex == (gameQuestions.length - 1)){
+            question.last = true;
+        }
+        question.answered = false;
+        window.messageBus.broadcast(JSON.stringify(question));
+        displayText(question.text + "<br /> A. " + question.a + "<br /> B. " + question.b + "<br /> C. " + question.c + "<br /> D. " + question.d);
+        questionIndex++;
+        
+      };
+      
+      // utility function to display the text message in the input field
+      function displayText(text) {
+        console.log(text);
+        document.getElementById("message").innerHTML=text;
+//        var elem = document.getElementById("message");
+//        var child = elem.children[0];
+        window.castReceiverManager.setApplicationState(text);
+      };
+
+    </script>
+  </body>
+</html>
